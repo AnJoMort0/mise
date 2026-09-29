@@ -27,29 +27,37 @@ function singular(word) {
 function normalise(value) {
     return String(value || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/pre[ -]?made/g, "").replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean).map(singular).join(" ").trim();
 }
+/* Product identity must never be based on substring containment: "peas" are
+   not "chickpeas", and "pepper" is not automatically "black pepper". Keep
+   only harmless preparation words out of identity, then compare the complete
+   token set. This still handles punctuation, accents, pluralisation and word
+   order without inventing relationships between different ingredients. */
+const NAME_IDENTITY_NOISE = new Set(["fresh", "ground", "dried", "dry", "whole", "plain", "raw"]);
+function identityTokens(value) {
+    return normalise(value).split(" ").filter(token => token && !NAME_IDENTITY_NOISE.has(token)).sort();
+}
+function canonicalName(value) { return identityTokens(value).join(" "); }
 function matchesName(a, b) {
-    const one = normalise(a), two = normalise(b);
-    if (!one || !two) return false;
-    if (one === two || one.includes(two) || two.includes(one)) return true;
-    const left = one.split(" ").filter(t => t.length > 2), right = new Set(two.split(" "));
-    return left.length > 0 && left.every(t => right.has(t));
+    const one = canonicalName(a), two = canonicalName(b);
+    return Boolean(one && two && one === two);
+}
+function findEquivalentStockByName(name, stock) {
+    const key = canonicalName(name);
+    if (!key) return null;
+    const matches = (stock || []).filter(item => canonicalName(item.name) === key);
+    return matches.length === 1 ? matches[0] : null;
 }
 
-/* Shopping items can point at an existing stock record. Prefer an exact
-   normalised name; only use fuzzy matching when it produces one unambiguous
-   result, so "Rice" does not accidentally attach to the wrong rice product. */
+/* Shopping items can point at an existing stock record. A saved stockId is
+   only trusted while the names still identify the same product; otherwise we
+   relink by strict product identity. */
 function findShoppingStock(item, stock) {
     if (!item) return null;
     if (item.stockId) {
         const byId = (stock || []).find(product => product.id === item.stockId);
-        if (byId) return byId;
+        if (byId && matchesName(byId.name, item.name)) return byId;
     }
-    const key = normalise(item.name);
-    if (!key) return null;
-    const exact = (stock || []).find(product => normalise(product.name) === key);
-    if (exact) return exact;
-    const fuzzy = (stock || []).filter(product => matchesName(product.name, item.name));
-    return fuzzy.length === 1 ? fuzzy[0] : null;
+    return findEquivalentStockByName(item.name, stock);
 }
 function linkShoppingItem(item, stock) {
     const product = findShoppingStock(item, stock);
@@ -209,15 +217,46 @@ function findRecipeStockItem(ingredient, stock) {
     const list = Array.isArray(stock) ? stock : [];
     if (ingredient?.stockId) {
         const byId = list.find(item => String(item.id) === String(ingredient.stockId));
-        if (byId) return byId;
+        /* Old versions could store a false link after a substring match. Only
+           trust the saved ID when the human-facing names still describe the
+           same product. */
+        if (byId && matchesName(byId.name, ingredient?.name || "")) return byId;
     }
-    return list.find(item => matchesName(item.name, ingredient?.name || "")) || null;
+    return findEquivalentStockByName(ingredient?.name || "", list);
 }
 function linkRecipeIngredientsToStock(recipe, stock) {
     return recipeIngredientObjects(recipe).map(ingredient => {
         if (ingredient.source === "buy") return { ...ingredient, stockId: null };
         const item = findRecipeStockItem(ingredient, stock);
-        return item ? { ...ingredient, source: "stock", stockId: item.id, name: item.name } : { ...ingredient, stockId: ingredient.stockId || null };
+        return item ? { ...ingredient, source: "stock", stockId: item.id, name: item.name } : { ...ingredient, stockId: null };
+    });
+}
+function storedRecipeIngredientSnapshot(recipe) {
+    const text = String(recipe?.text || "").trim();
+    if (!text) return [];
+    if (text.startsWith("{") && text.endsWith("}")) {
+        try {
+            const parsed = JSON.parse(text);
+            if (Array.isArray(parsed?.ingredients)) return structuredRecipe(parsed)?.ingredients || [];
+        }
+        catch { }
+    }
+    return parseSingleRecipe(text).ingredients || [];
+}
+function repairLegacyRecipeIngredientLinks(recipe, ingredients, stock) {
+    const originals = storedRecipeIngredientSnapshot(recipe);
+    if (!originals.length) return ingredients;
+    return ingredients.map((ingredient, index) => {
+        const original = originals[index];
+        if (!original?.name || original.source === "buy") return ingredient;
+        const originalStock = findEquivalentStockByName(original.name, stock);
+        if (!originalStock) return ingredient;
+        const linked = ingredient?.stockId ? (stock || []).find(item => String(item.id) === String(ingredient.stockId)) : null;
+        /* Only rewrite when the stored original gives us a clear exact
+           identity and the existing saved link points somewhere else. */
+        if (linked && linked.id === originalStock.id) return ingredient;
+        if (!linked && matchesName(ingredient?.name || "", originalStock.name)) return ingredient;
+        return { ...ingredient, name: originalStock.name, source: "stock", stockId: originalStock.id };
     });
 }
 function parseRecipeIngredients(text) { return parseSingleRecipe(text).ingredients; }
@@ -754,7 +793,7 @@ STEPS:`;
                 activeMinutes: Number(recipe?.activeMinutes || reparsed.activeMinutes) || null,
                 totalMinutes: Number(recipe?.totalMinutes || reparsed.totalMinutes) || null,
                 leadTime: String(recipe?.leadTime || reparsed.leadTime || "none"),
-                ingredients: linkRecipeIngredientsToStock({ ingredients: existingIngredients.length ? existingIngredients : reparsed.ingredients }, stock),
+                ingredients: linkRecipeIngredientsToStock({ ingredients: repairLegacyRecipeIngredientLinks(recipe, existingIngredients.length ? existingIngredients : reparsed.ingredients, stock) }, stock),
                 steps: existingSteps.length ? existingSteps : reparsed.steps,
                 text: String(recipe?.text || reparsed.text || ""),
                 createdAt: Number(recipe?.createdAt || Date.now()),
