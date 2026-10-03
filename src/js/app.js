@@ -110,6 +110,7 @@ function App() {
     const [selectedRecipeId, setSelectedRecipeId] = useState(null);
     const [recipeQuery, setRecipeQuery] = useState("");
     const [recipeIngredientFilter, setRecipeIngredientFilter] = useState("");
+    const [recipeTitleTopicFilter, setRecipeTitleTopicFilter] = useState("");
     const [recipeAvailabilityFilter, setRecipeAvailabilityFilter] = useState("all");
     const [recipeTagFilter, setRecipeTagFilter] = useState("all");
     const [recipeSort, setRecipeSort] = useState("newest");
@@ -397,17 +398,23 @@ function App() {
         if (!highlightedIngredient) return;
         setRecipeQuery("");
         setRecipeIngredientFilter(highlightedIngredient.name);
+        setRecipeTitleTopicFilter("");
         setRecipeAvailabilityFilter("all");
         setRecipeTagFilter("all");
         setTab("recipes");
     };
     const visibleStock = useMemo(() => state.stock.filter(item => (categoryFilter === "all" || categoryFilter === "unsorted" ? categoryFilter !== "unsorted" || !item.categoryId : item.categoryId === categoryFilter) && (statusFilter === "all" || (statusFilter === "out" ? item.quantity === 0 : hasStatus(item, statusFilter))) && normalise(item.name).includes(normalise(query))).sort((a, b) => (a.quantity === 0 ? 1 : 0) - (b.quantity === 0 ? 1 : 0) || a.name.localeCompare(b.name)), [state.stock, categoryFilter, statusFilter, query]);
     const recipeTags = useMemo(() => Array.from(new Set(state.recipes.flatMap(recipe => recipe.tags || []).filter(Boolean))).sort((a, b) => a.localeCompare(b)), [state.recipes]);
+    const recipeTitleTopicOptions = useMemo(() => recipeTitleTopics(state.recipes), [state.recipes]);
+    useEffect(() => {
+        if (recipeTitleTopicFilter && !recipeTitleTopicOptions.some(topic => topic.key === normalise(recipeTitleTopicFilter))) setRecipeTitleTopicFilter("");
+    }, [recipeTitleTopicFilter, recipeTitleTopicOptions]);
     const visibleRecipes = useMemo(() => state.recipes.filter(recipe => {
         const availability = recipeAvailability(recipe, state.stock);
         const ingredientText = recipeIngredientObjects(recipe).map(ingredient => ingredient.name).join(" ");
         if (recipeQuery && !normalise(`${recipe.title} ${recipe.cuisine || ""} ${(recipe.tags || []).join(" ")} ${ingredientText}`).includes(normalise(recipeQuery))) return false;
         if (recipeIngredientFilter && !recipeIngredientObjects(recipe).some(ingredient => matchesName(ingredient.name, recipeIngredientFilter))) return false;
+        if (recipeTitleTopicFilter && !recipeTitleHasTopic(recipe.title, recipeTitleTopicFilter)) return false;
         if (recipeAvailabilityFilter === "ready" && !availability.ready) return false;
         if (recipeAvailabilityFilter === "missing" && availability.ready) return false;
         if (recipeAvailabilityFilter === "prep" && normalise(recipe.mode) !== "prep ahead") return false;
@@ -419,7 +426,7 @@ function App() {
         if (recipeSort === "cooked") return Number(b.timesCooked || 0) - Number(a.timesCooked || 0) || Number(b.createdAt) - Number(a.createdAt);
         if (recipeSort === "az") return a.title.localeCompare(b.title);
         return Number(b.createdAt) - Number(a.createdAt);
-    }), [state.recipes, state.stock, recipeQuery, recipeIngredientFilter, recipeAvailabilityFilter, recipeTagFilter, recipeSort]);
+    }), [state.recipes, state.stock, recipeQuery, recipeIngredientFilter, recipeTitleTopicFilter, recipeAvailabilityFilter, recipeTagFilter, recipeSort]);
     const selectedRecipe = state.recipes.find(recipe => recipe.id === selectedRecipeId) || null;
     const prompt = useMemo(() => makePrompt(state, tone), [state, tone]);
     const addStock = (event) => {
@@ -739,6 +746,14 @@ function App() {
                     h("div", { className: "title-actions recipe-head-actions" },
                         h("button", { className: "soft-button", onClick: () => setRecipeEditorRecipe({ id: null }) }, h(Plus, null), "New recipe"),
                         h("button", { className: "primary-button", onClick: () => setShowRecipeImport(true) }, h(ClipboardPaste, null), "Import recipe"))),
+                recipeTitleTopicOptions.length > 0 && h("div", { className: "recipe-topic-strip", "aria-label": "Automatic recipe categories" },
+                    h("span", { className: "recipe-topic-label" }, "Auto categories"),
+                    recipeTitleTopicOptions.map(topic => h("button", {
+                        key: topic.key,
+                        className: recipeTitleTopicFilter === topic.key ? "active" : "",
+                        onClick: () => setRecipeTitleTopicFilter(current => current === topic.key ? "" : topic.key),
+                        "aria-pressed": recipeTitleTopicFilter === topic.key
+                    }, h("span", null, topic.label), h("small", null, topic.count)))),
                 h("div", { className: "recipe-toolbar" },
                     h("label", { className: "recipe-search" }, h(Search, null), h("input", { value: recipeQuery, onChange: e => setRecipeQuery(e.target.value), placeholder: "Find recipe, ingredient or tag", "aria-label": "Find recipe" }), recipeQuery && h("button", { type: "button", onClick: () => setRecipeQuery(""), "aria-label": "Clear recipe search" }, h(X, null))),
                     h("select", { value: recipeAvailabilityFilter, onChange: e => setRecipeAvailabilityFilter(e.target.value), "aria-label": "Filter recipes by availability" },
@@ -755,6 +770,10 @@ function App() {
                         h("option", { value: "match" }, "Best stock match"),
                         h("option", { value: "cooked" }, "Most cooked"),
                         h("option", { value: "az" }, "A–Z"))),
+                recipeTitleTopicFilter && h("div", { className: "recipe-active-filter recipe-topic-active" },
+                    h(BookOpen, null),
+                    h("span", null, "Title category ", h("b", null, recipeTitleTopicOptions.find(topic => topic.key === recipeTitleTopicFilter)?.label || recipeTitleTopicFilter)),
+                    h("button", { onClick: () => setRecipeTitleTopicFilter(""), "aria-label": "Clear automatic recipe category", title: "Clear automatic category" }, h(X, null))),
                 recipeIngredientFilter && h("div", { className: "recipe-active-filter" },
                     h(BookOpen, null),
                     h("span", null, "Using ", h("b", null, recipeIngredientFilter)),

@@ -570,6 +570,46 @@ function consumeRecipeStock(recipe, stock) {
     });
     return { stock: next, consumed, skipped, depleted };
 }
+
+function recipeTitleTokens(title) {
+    const text = String(title || "");
+    const matches = text.match(/[\p{L}\p{N}][\p{L}\p{N}'’\-]*/gu) || [];
+    return matches.map((label, index) => ({
+        label,
+        key: normalise(label),
+        index,
+        capitalised: /^\p{Lu}/u.test(label)
+    })).filter(token => token.key && token.key.length >= 3 && !/^\d+$/.test(token.key));
+}
+function recipeTitleTopics(recipes, minimumCount = 2) {
+    const stats = new Map();
+    for (const recipe of recipes || []) {
+        const seen = new Set();
+        for (const token of recipeTitleTokens(recipe?.title)) {
+            if (seen.has(token.key)) continue;
+            seen.add(token.key);
+            const current = stats.get(token.key) || { key: token.key, count: 0, labels: new Map(), capitalised: 0, first: 0 };
+            current.count += 1;
+            current.capitalised += token.capitalised ? 1 : 0;
+            current.first += token.index === 0 ? 1 : 0;
+            current.labels.set(token.label, (current.labels.get(token.label) || 0) + 1);
+            stats.set(token.key, current);
+        }
+    }
+    return Array.from(stats.values())
+        .filter(topic => topic.count >= minimumCount && (topic.capitalised > 0 || topic.first >= minimumCount))
+        .map(topic => ({
+            key: topic.key,
+            count: topic.count,
+            label: Array.from(topic.labels.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] || topic.key
+        }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+function recipeTitleHasTopic(title, topicKey) {
+    const key = normalise(topicKey);
+    return recipeTitleTokens(title).some(token => token.key === key);
+}
+
 function recipeTotalMinutes(recipe) { return Number(recipe?.totalMinutes) || Number(recipe?.activeMinutes) || Infinity; }
 
 function inferCategory(name, categories, stock) {

@@ -1658,3 +1658,63 @@ button svg.lucide{pointer-events:none}
   .shopping-group-heading{padding-inline:3px}
   .shopping-group-heading .category-glyph{width:25px;height:25px;min-width:25px}
 }
+
+
+/* v30 automatic recipe-title categories */
+.recipe-topic-strip{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:0 0 12px;
+  overflow-x:auto;
+  padding:1px 1px 5px;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+}
+.recipe-topic-strip::-webkit-scrollbar{display:none}
+.recipe-topic-label{
+  flex:0 0 auto;
+  color:var(--muted);
+  font-size:.66rem;
+  font-weight:900;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.recipe-topic-strip button{
+  display:inline-flex;
+  flex:0 0 auto;
+  align-items:center;
+  gap:7px;
+  min-height:34px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:#fff;
+  padding:0 10px 0 12px;
+  color:var(--ink);
+  font-size:.77rem;
+  font-weight:850;
+  white-space:nowrap;
+}
+.recipe-topic-strip button:hover{background:#f5f3ee}
+.recipe-topic-strip button.active{
+  border-color:var(--ink);
+  background:var(--ink);
+  color:#fff;
+}
+.recipe-topic-strip button small{
+  display:grid;
+  min-width:20px;
+  height:20px;
+  place-items:center;
+  border-radius:999px;
+  background:#f0eee8;
+  color:var(--muted);
+  font-size:.62rem;
+  font-weight:900;
+}
+.recipe-topic-strip button.active small{background:rgb(255 255 255/15%);color:#fff}
+.recipe-topic-active{margin-top:-2px}
+@media(max-width:620px){
+  .recipe-topic-strip{margin-inline:-10px;padding-inline:10px}
+  .recipe-topic-label{position:sticky;left:0;z-index:1;background:var(--canvas);padding-right:3px}
+}
