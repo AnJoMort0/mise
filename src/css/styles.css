@@ -1718,3 +1718,34 @@ button svg.lucide{pointer-events:none}
   .recipe-topic-strip{margin-inline:-10px;padding-inline:10px}
   .recipe-topic-label{position:sticky;left:0;z-index:1;background:var(--canvas);padding-right:3px}
 }
+
+
+/* v31 cook exclusions + compact preference controls */
+.cook-exclusions{margin-bottom:14px;border:1px solid var(--line);border-radius:26px;background:#fff;padding:18px}
+.cook-exclusions-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:14px}
+.cook-exclusions-head h2{margin:0;font-family:"Arial Black",Impact,sans-serif;font-size:clamp(1.5rem,3vw,2.2rem);letter-spacing:-.045em}
+.cook-exclusions-head p{max-width:760px;margin:6px 0 0;color:var(--muted);font-size:.84rem;line-height:1.5}
+.cook-exclusions-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.avoidance-editor{min-width:0;border:1px solid var(--line);border-radius:18px;background:#faf9f5;padding:13px}
+.avoidance-editor-head{display:grid;grid-template-columns:36px minmax(0,1fr);align-items:start;gap:10px}
+.avoidance-editor-head>span{display:grid;width:36px;height:36px;place-items:center;border-radius:11px;background:#f0eee8;color:var(--paprika)}
+.avoidance-editor-head>span .ui-icon{--icon-size:18px}
+.avoidance-editor h3{margin:1px 0 3px;font-size:.96rem}
+.avoidance-editor-head p{margin:0;color:var(--muted);font-size:.75rem;line-height:1.4}
+.avoidance-chips{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 10px}
+.avoidance-chips>span{display:inline-flex;align-items:center;gap:6px;max-width:100%;border:1px solid #edd1c8;border-radius:999px;background:#fff0eb;padding:5px 6px 5px 9px;color:#873a28;font-size:.74rem}
+.avoidance-chips b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.avoidance-chips button{display:grid;width:22px;height:22px;flex:0 0 22px;place-items:center;border-radius:999px;background:#fff;color:#8f4a38}
+.avoidance-chips button .ui-icon{--icon-size:12px}
+.avoidance-empty{margin:12px 0 10px;color:var(--muted);font-size:.74rem}
+.avoidance-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px}
+.avoidance-add input{min-width:0;height:40px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:0 11px}
+.avoidance-add .soft-button{min-height:40px;border-radius:12px;padding-inline:11px}
+@media(max-width:700px){
+  .cook-exclusions{padding:14px;border-radius:22px}
+  .cook-exclusions-grid{grid-template-columns:1fr}
+  .cook-exclusions-head{margin-bottom:11px}
+  .avoidance-editor{padding:11px}
+  .avoidance-add .soft-button{font-size:0;width:42px;padding:0}
+  .avoidance-add .soft-button .ui-icon{--icon-size:17px}
+}

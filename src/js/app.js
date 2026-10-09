@@ -76,6 +76,27 @@ function shoppingAisleRank(category, categories) {
     return 500 + customIndex;
 }
 
+function AvoidanceListEditor({ title, description, values, placeholder, Icon, onAdd, onRemove }) {
+    const [draft, setDraft] = useState("");
+    const submit = event => {
+        event.preventDefault();
+        const value = draft.trim();
+        if (!value) return;
+        onAdd(value);
+        setDraft("");
+    };
+    return h("section", { className: "avoidance-editor" },
+        h("div", { className: "avoidance-editor-head" },
+            h("span", null, h(Icon, null)),
+            h("div", null, h("h3", null, title), h("p", null, description))),
+        values.length ? h("div", { className: "avoidance-chips" }, values.map(value => h("span", { key: value },
+            h("b", null, value),
+            h("button", { type: "button", onClick: () => onRemove(value), "aria-label": `Remove ${value}`, title: `Remove ${value}` }, h(X, null))))) : h("p", { className: "avoidance-empty" }, "Nothing listed yet."),
+        h("form", { className: "avoidance-add", onSubmit: submit },
+            h("input", { value: draft, onChange: event => setDraft(event.target.value), placeholder, "aria-label": placeholder }),
+            h("button", { className: "soft-button", type: "submit" }, h(Plus, null), "Add")));
+}
+
 function Stepper({ value, onMinus, onPlus, label }) { return h("div", { className: "stepper", "aria-label": label },
     h("button", { onClick: onMinus, "aria-label": `Decrease ${label}` },
         h(Minus, null)),
@@ -144,6 +165,8 @@ function App() {
         return () => { cancelled = true; };
     }, []);
     const activity = (type, label) => ({ id: uuid(), type, label, at: Date.now() });
+    const addAvoidance = (field, value) => setState(current => ({ ...current, [field]: normaliseAvoidList([...(current[field] || []), value]) }));
+    const removeAvoidance = (field, value) => setState(current => ({ ...current, [field]: normaliseAvoidList((current[field] || []).filter(item => normalise(item) !== normalise(value))) }));
     const addToShopping = (name, source = "manual", quantity = 1, unit = "") => setState(current => {
         const stockItem = findShoppingStock({ name }, current.stock);
         const targetUnit = String(unit || stockItem?.unit || "");
@@ -779,6 +802,15 @@ function App() {
                     h("span", null, "Using ", h("b", null, recipeIngredientFilter)),
                     h("button", { onClick: () => setRecipeIngredientFilter(""), "aria-label": `Clear ${recipeIngredientFilter} recipe filter`, title: "Clear ingredient filter" }, h(X, null))),
                 h("div", { className: "recipe-list recipe-grid" }, visibleRecipes.length ? visibleRecipes.map(recipe => h(RecipeCard, { key: recipe.id, recipe, state, onOpen: () => setSelectedRecipeId(recipe.id) })) : h(Empty, { icon: h(BookOpen, null), title: state.recipes.length ? "No recipes match" : "No saved recipes", text: state.recipes.length ? "Try another filter." : "Create a recipe manually or import an AI reply and Mise will turn it into a useful recipe card." }))),
+            tab === "cook" && h("section", { className: "cook-exclusions" },
+                h("div", { className: "cook-exclusions-head" },
+                    h("div", null,
+                        h("span", { className: "eyebrow" }, h(X, null), " PERSONAL EXCLUSIONS"),
+                        h("h2", null, "Keep bad fits out of the prompt"),
+                        h("p", null, "These are added to the generated prompt automatically. Meals are treated as do-not-repeat ideas; disliked ingredients are excluded from recipes, substitutions and AI shopping suggestions."))),
+                h("div", { className: "cook-exclusions-grid" },
+                    h(AvoidanceListEditor, { title: "Meals I don't like", description: "Add dishes or meal styles you do not want, including close variations.", values: state.avoidMeals || [], placeholder: "e.g. tuna pasta bake", Icon: Utensils, onAdd: value => addAvoidance("avoidMeals", value), onRemove: value => removeAvoidance("avoidMeals", value) }),
+                    h(AvoidanceListEditor, { title: "Ingredients I don't like", description: "Mise tells the AI not to cook with these or recommend buying them.", values: state.avoidIngredients || [], placeholder: "e.g. blue cheese", Icon: ShoppingBasket, onAdd: value => addAvoidance("avoidIngredients", value), onRemove: value => removeAvoidance("avoidIngredients", value) }))),
             tab === "cook" && h("section", { className: "page cook-page" },
                 h("div", { className: "cook-intro" },
                     h("span", { className: "eyebrow" },
@@ -788,7 +820,7 @@ function App() {
                         "Your dinner",
                         h("br", null),
                         "brief."),
-                    h("p", null, "The prompt blends live stock with your local recipe habits, including a prep-ahead idea for tomorrow or later when your stock suits one."),
+                    h("p", null, "The prompt blends live stock, recipe-title memory, your last three meals and your personal exclusions into three focused ideas: Quick, Medium/Long and Prep Ahead."),
                     h("div", { className: "tone-switch" }, ["healthy", "balanced", "comfort"].map(choice => h("button", { className: tone === choice ? "active" : "", key: choice, onClick: () => setTone(choice) },
                         choice === "healthy" ? h(Leaf, null) : choice === "comfort" ? h(Flame, null) : h(CircleGauge, null),
                         h("span", null, choice)))),
@@ -807,7 +839,11 @@ function App() {
                             " shopping signals"),
                         h("span", null,
                             h(CalendarClock, null),
-                            "prep-ahead enabled")),
+                            "3 focused recipes"),
+                        ((state.avoidMeals?.length || 0) + (state.avoidIngredients?.length || 0)) ? h("span", null,
+                            h(X, null),
+                            (state.avoidMeals?.length || 0) + (state.avoidIngredients?.length || 0),
+                            " exclusions") : null),
                     h("button", { className: "primary-button copy-prompt", onClick: copyPrompt },
                         h(Clipboard, null),
                         "Copy prompt")),
@@ -1148,7 +1184,7 @@ const transferSectionOptions = [
     { id: "categories", label: "Categories", description: "Names, colours and category icons", Icon: Tags },
     { id: "recipes", label: "Recipes", description: "Saved recipes and their cook counts", Icon: BookOpen },
     { id: "shopping", label: "Shopping", description: "Current shopping list and quantities", Icon: ShoppingBasket },
-    { id: "prompt", label: "Cooking prompt", description: "Your customised default AI prompt", Icon: Bot },
+    { id: "prompt", label: "Cooking prompt", description: "Your default AI prompt plus disliked meals/ingredients", Icon: Bot },
     { id: "history", label: "History & insights", description: "Restock analytics and activity history", Icon: History }
 ];
 function TransferSectionPicker({ selected, available = TRANSFER_SECTION_KEYS, onChange }) {
@@ -1364,7 +1400,7 @@ function PromptDefaultsModal({ value, onClose, onSave }) {
     };
     return h(Modal, { title: "Default cooking prompt", onClose, wide: true },
         h("div", { className: "template-editor" },
-            h("p", null, "This is the reusable default behind the Cook page. Edit it once and Mise will use it for future prompt copies. You can rewrite the cuisine guidance, tone or output instructions, but keep the placeholders below so live data can still be inserted. Mise automatically appends your saved recipe library and the last three meals you marked ‘I did this’, so the AI can avoid repetitive meals even if you customise this template."),
+            h("p", null, "This is the reusable default behind the Cook page. Edit it once and Mise will use it for future prompt copies. You can rewrite the cuisine guidance, tone or output instructions, but keep the placeholders below so live data can still be inserted. Mise automatically appends saved recipe titles only, the last three meals you marked ‘I did this’, and your personal exclusions. That keeps the prompt compact while preserving variety rules even if you customise this template."),
             h("div", { className: "template-token-list" }, REQUIRED_PROMPT_TOKENS.map(token => h("code", { key: token }, token))),
             h("textarea", { value: draft, rows: 22, onChange: event => { setDraft(event.target.value); if (error) setError(""); } }),
             error && h("p", { className: "form-error" }, error),

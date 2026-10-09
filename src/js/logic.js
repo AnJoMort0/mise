@@ -631,14 +631,14 @@ function promptTonePreference(tone) {
     return tone === "healthy" ? "health-forward and deeply flavourful" : tone === "comfort" ? "bold comfort food without being careless" : "mostly healthy, always flavour-first, occasional cheaty option";
 }
 function defaultPromptTemplate() {
-    return `Act as my practical, inventive home cook. Use my real stock and return four clearly different recipes I could cook now, plus one PREP AHEAD recipe when the stock genuinely supports it. The prep-ahead recipe is intentionally allowed to be for tomorrow or later rather than tonight.
+    return `Act as my practical, inventive home cook. Use my real stock and return exactly three clearly different recipes: one QUICK, one MEDIUM/LONG, and one PREP AHEAD.
 
 KITCHEN
 - Hob
 - Conventional oven (no fan)
 - Very small air fryer
-- Default: 1 portion
-- Longer freezer-friendly meals: 4 portions, eat 1 and freeze 3
+- Portion size is recipe-dependent: use 1 portion by default; use 2 portions when the dish is especially good refrigerated for the next day; use up to 4 portions when it is genuinely freezer-friendly.
+- Do not bulk-cook just to hit a number. Choose 1-4 portions only when the recipe benefits from it.
 - Cuisine preferences: keep this broad and adaptable to the user rather than locked to one country. You can still lean into any cuisines the user mentions.
 - Preference: {{TONE_PREFERENCE}}
 
@@ -655,14 +655,16 @@ STOCK TAGS
 - frozen = currently frozen and may need thawing or direct-from-frozen handling.
 - leftover = already cooked/prepared food, not a raw ingredient. A leftover can be reheated and plated as a side/base, or safely repurposed inside another dish. Do not tell me to cook a leftover from raw again. If a leftover is also frozen, account for safe thawing/reheating.
 
-OPTIONS FOR NOW
-1. FAST + ALONE — genuinely quick, minimal washing up
-2. MEDIUM — a little more effort, one portion
-3. COOK ONCE — four freezer-friendly portions
-4. WILD CARD — a clever cuisine or combination
+THREE OPTIONS
+1. QUICK — genuinely quick, minimal washing up. It may be 1-4 portions when batch cooking genuinely suits the dish.
+2. MEDIUM/LONG — more involved or slower, with enough payoff to justify the extra time. It may be 1-4 portions when batch cooking genuinely suits the dish.
+3. PREP AHEAD — something worth starting now for later. This can be a marinade, brine, soak, proof, ferment, pickle, cure, assembled make-ahead dish, or another preparation that benefits from resting or being finished later. Clearly separate WHAT TO DO NOW from HOW TO FINISH LATER and give safe refrigeration/storage instructions.
 
-PREP AHEAD
-5. PREP AHEAD — include this when worthwhile. Suggest something I can start now but deliberately finish tomorrow or later because long inactive time improves it: for example a 4–48 hour marinade, overnight brine/soak/proof, slow ferment/pickle, cured preparation, or another long-resting technique. Prefer stock that is open, near expiry, or otherwise likely to benefit from being used soon. Make it tempting enough that, while choosing tonight's meal, I might save this recipe for the next day. Clearly separate WHAT TO DO NOW from HOW TO FINISH LATER. Give refrigeration/storage instructions and conservative food-safety timing; never suggest leaving raw meat, fish, dairy, or other perishable food at room temperature for a long rest. If no sensible long-prep recipe fits the stock, omit the prep-ahead recipe rather than forcing one.
+PORTION RULES
+- 1 portion is the normal choice for a one-off meal.
+- Use 2 portions when the second portion is specifically good refrigerated and eaten the next day.
+- Use 3-4 portions only when the recipe freezes well or there is another clear batch-cooking advantage.
+- These portion rules apply to QUICK, MEDIUM/LONG and PREP AHEAD alike.
 
 For every proposed recipe include cuisine, tags, active/total time, exact measurable amounts, substitutions, heat levels and visual doneness cues. Prioritise near-expiry items and refrigerated leftovers first, then opened ingredients and genuinely fresh produce. Treat vegetables, leafy greens, mushrooms, fresh fruit, fresh herbs and similar short-lived ingredients as use-soon by default even when they have no urgency tag. Leftovers are already cooked/prepared: use them as a ready-made component, side, base, filling or repurposed ingredient, and only describe reheating/crisping/seasoning/combining steps that are still needed. Frozen leftovers are available but are not automatically urgent; flag appropriate thawing/reheating. Never assume an unlisted ingredient is available.
 
@@ -676,7 +678,7 @@ Use this exact top-level shape:
   "recipes": [
     {
       "title": "Recipe name",
-      "mode": "Fast | Medium | Cook once | Wild card | Prep ahead",
+      "mode": "Quick | Medium/Long | Prep ahead",
       "cuisine": "cuisine or style",
       "tags": ["2-5", "short", "tags"],
       "servings": 1,
@@ -699,7 +701,8 @@ Use this exact top-level shape:
 }
 
 JSON RULES:
-- Return four recipes for now, plus the prep-ahead recipe only when it is genuinely worthwhile. If prep-ahead should be skipped, simply omit it from recipes; do not add a fake recipe named SKIP.
+- Return exactly three recipes: one Quick, one Medium/Long and one Prep ahead.
+- servings must follow the portion rules above rather than always defaulting to 1.
 - For every stock ingredient, source must be "stock" and name must copy the CURRENT STOCK name exactly.
 - Missing ingredients use source "buy".
 - quantity must be a JSON number, never words. unit is a short string and can be empty for countable items.
@@ -710,8 +713,32 @@ JSON RULES:
 STRATEGIC SHOPPING UNLOCK:
 The shopping array is NOT every missing ingredient from the recipes. It is a separate strategic list of only 0-3 additional ingredients total, chosen together to unlock the maximum number and variety of realistic extra recipes when combined with CURRENT STOCK. Think of it as a small set-cover problem: prefer ingredients that complete many near-miss meals, avoid redundant picks that unlock mostly the same dishes, and favour ingredients that connect strongly to several things already in stock. Do not recommend something merely because it is a generally useful staple. If buying nothing meaningfully improves recipe coverage, return an empty shopping array.`;
 }
+function upgradeLegacyPromptTemplate(template) {
+    let text = String(template || "").replace(/\r\n/g, "\n").trim();
+    if (!text) return defaultPromptTemplate();
+    text = text.replace(
+        "Act as my practical, inventive home cook. Use my real stock and return four clearly different recipes I could cook now, plus one PREP AHEAD recipe when the stock genuinely supports it. The prep-ahead recipe is intentionally allowed to be for tomorrow or later rather than tonight.",
+        "Act as my practical, inventive home cook. Use my real stock and return exactly three clearly different recipes: one QUICK, one MEDIUM/LONG, and one PREP AHEAD."
+    );
+    text = text.replace(
+        "- Default: 1 portion\n- Longer freezer-friendly meals: 4 portions, eat 1 and freeze 3",
+        "- Portion size is recipe-dependent: use 1 portion by default; use 2 portions when the dish is especially good refrigerated for the next day; use up to 4 portions when it is genuinely freezer-friendly.\n- Do not bulk-cook just to hit a number. Choose 1-4 portions only when the recipe benefits from it."
+    );
+    const optionStart = text.indexOf("OPTIONS FOR NOW");
+    const detailStart = text.indexOf("\n\nFor every proposed recipe include", optionStart);
+    if (optionStart >= 0 && detailStart > optionStart && /4\. WILD CARD/.test(text.slice(optionStart, detailStart))) {
+        const replacement = `THREE OPTIONS\n1. QUICK — genuinely quick, minimal washing up. It may be 1-4 portions when batch cooking genuinely suits the dish.\n2. MEDIUM/LONG — more involved or slower, with enough payoff to justify the extra time. It may be 1-4 portions when batch cooking genuinely suits the dish.\n3. PREP AHEAD — something worth starting now for later. This can be a marinade, brine, soak, proof, ferment, pickle, cure, assembled make-ahead dish, or another preparation that benefits from resting or being finished later. Clearly separate WHAT TO DO NOW from HOW TO FINISH LATER and give safe refrigeration/storage instructions.\n\nPORTION RULES\n- 1 portion is the normal choice for a one-off meal.\n- Use 2 portions when the second portion is specifically good refrigerated and eaten the next day.\n- Use 3-4 portions only when the recipe freezes well or there is another clear batch-cooking advantage.\n- These portion rules apply to QUICK, MEDIUM/LONG and PREP AHEAD alike.`;
+        text = `${text.slice(0, optionStart)}${replacement}${text.slice(detailStart)}`;
+    }
+    text = text.replace('"mode": "Fast | Medium | Cook once | Wild card | Prep ahead"', '"mode": "Quick | Medium/Long | Prep ahead"');
+    text = text.replace(
+        "- Return four recipes for now, plus the prep-ahead recipe only when it is genuinely worthwhile. If prep-ahead should be skipped, simply omit it from recipes; do not add a fake recipe named SKIP.",
+        "- Return exactly three recipes: one Quick, one Medium/Long and one Prep ahead.\n- servings must follow the portion rules above rather than always defaulting to 1."
+    );
+    return text;
+}
 function normalisePromptTemplate(template) {
-    return typeof template === "string" && template.trim() ? template.replace(/\r\n/g, "\n").trim() : defaultPromptTemplate();
+    return upgradeLegacyPromptTemplate(typeof template === "string" && template.trim() ? template : defaultPromptTemplate());
 }
 function promptTemplateHasRequiredTokens(template) {
     return REQUIRED_PROMPT_TOKENS.every(token => template.includes(token));
@@ -722,6 +749,23 @@ function applyPromptTemplate(template, values) {
         .replaceAll("{{CURRENT_STOCK}}", values.currentStock)
         .replaceAll("{{LOCAL_HABITS}}", values.localHabits)
         .replaceAll("{{TONE_PREFERENCE}}", values.tonePreference);
+}
+function normaliseAvoidList(values) {
+    const source = Array.isArray(values) ? values : [];
+    const result = [], seen = new Set();
+    for (const raw of source) {
+        const value = String(raw || "").trim();
+        const key = normalise(value);
+        if (!key || seen.has(key)) continue;
+        seen.add(key); result.push(value);
+    }
+    return result.slice(0, 100);
+}
+function dislikePromptMemory(state) {
+    const meals = normaliseAvoidList(state?.avoidMeals);
+    const ingredients = normaliseAvoidList(state?.avoidIngredients);
+    if (!meals.length && !ingredients.length) return "";
+    return `\n\nPERSONAL EXCLUSIONS — HARD RULES\nMEALS / DISHES I DO NOT LIKE\n${meals.length ? meals.join(" | ") : "None listed."}\n\nINGREDIENTS / PRODUCTS I DO NOT LIKE\n${ingredients.length ? ingredients.join(" | ") : "None listed."}\n\n- Do not propose any listed meal, or a close variation that is substantially the same dish.\n- Do not intentionally use a listed ingredient/product in a recipe, even if it appears in CURRENT STOCK.\n- Never put a listed ingredient/product, or an obvious near-equivalent of it, in the shopping array.\n- Do not suggest a disliked product as a substitution. Choose a genuinely different route instead.`;
 }
 
 function uniqueRecipeIngredientNames(recipe) {
@@ -734,14 +778,8 @@ function uniqueRecipeIngredientNames(recipe) {
     });
 }
 function savedRecipeMemory(state) {
-    const recipes = Array.isArray(state?.recipes) ? state.recipes : [];
-    if (!recipes.length) return "No saved recipes yet.";
-    return recipes.map(recipe => {
-        const ingredients = uniqueRecipeIngredientNames(recipe);
-        const ingredientText = ingredients.length ? ingredients.slice(0, 8).join(", ") + (ingredients.length > 8 ? ", …" : "") : "ingredients not recorded";
-        const descriptors = [recipe.cuisine, recipe.mode, ...(Array.isArray(recipe.tags) ? recipe.tags.slice(0, 3) : [])].map(value => String(value || "").trim()).filter(Boolean);
-        return `- ${recipe.title}${descriptors.length ? ` | ${descriptors.join(" · ")}` : ""} | main ingredients: ${ingredientText}`;
-    }).join("\n");
+    const titles = (Array.isArray(state?.recipes) ? state.recipes : []).map(recipe => String(recipe?.title || "").trim()).filter(Boolean);
+    return titles.length ? titles.join(" | ") : "No saved recipes yet.";
 }
 function recentCookedMeals(state, limit = 3) {
     const recipes = Array.isArray(state?.recipes) ? state.recipes : [];
@@ -770,13 +808,8 @@ function recentCookedMeals(state, limit = 3) {
 }
 function recipeVarietyMemory(state) {
     const recent = recentCookedMeals(state, 3);
-    const recentText = recent.length ? recent.map((meal, index) => {
-        const ingredients = meal.recipe ? uniqueRecipeIngredientNames(meal.recipe) : [];
-        const ingredientText = ingredients.length ? ingredients.slice(0, 12).join(", ") + (ingredients.length > 12 ? ", …" : "") : "ingredient details unavailable";
-        const date = meal.at ? new Date(meal.at).toISOString().slice(0, 10) : "date unknown";
-        return `${index + 1}. ${meal.title} (${date}) — ${ingredientText}`;
-    }).join("\n") : "No meals have been marked as cooked yet.";
-    return `\n\nRECIPE MEMORY & MEAL ROTATION\nSAVED RECIPE LIBRARY\n${savedRecipeMemory(state)}\n\nLAST 3 COOKED MEALS — newest first\n${recentText}\n\nVARIETY RULES\n- Do not reproduce a saved recipe, rename it, or offer a trivial variation of it. New ideas should be meaningfully different in technique, flavour profile, structure, or ingredient combination.\n- Treat the last three cooked meals as a stronger short-term exclusion zone. Avoid proposing the same dish or a close remix of what was just eaten.\n- Especially avoid repeating essentially the same core combination of protein + starch/base + dominant vegetables/flavour profile as the most recent meal/day before. Rotate the centre of the plate, cooking method and flavour direction where the stock allows it.\n- Ingredient overlap is fine for pantry staples, condiments and items that urgently need using, but do not let that turn into substantially the same meal.\n- If near-expiry stock genuinely makes some repetition sensible, use it in a clearly different dish and technique rather than ignoring the stock or forcing waste.\n- Use this memory for exclusion and variety only; do not output or quote this memory back to me.`;
+    const recentText = recent.length ? recent.map((meal, index) => `${index + 1}. ${meal.title}`).join("\n") : "No meals have been marked as cooked yet.";
+    return `\n\nRECIPE MEMORY & MEAL ROTATION\nSAVED RECIPE TITLES ONLY\n${savedRecipeMemory(state)}\n\nLAST 3 COOKED MEALS — newest first, titles only\n${recentText}\n\nVARIETY RULES\n- Do not reproduce a saved recipe, rename it, or offer a trivial variation of it. Use the saved titles as a compact exclusion memory rather than repeating their full recipe data.\n- Treat the last three cooked meal titles as a stronger short-term exclusion zone. Avoid the same dish or an obviously close remix of what was just eaten.\n- Where a recent title clearly reveals the core protein, starch/base or flavour direction, avoid repeating essentially the same combination on the next meal/day.\n- Ingredient overlap is fine for pantry staples and urgent use-soon stock, but the resulting meal should still feel meaningfully different.\n- If near-expiry stock makes some repetition sensible, change the dish structure, cooking method or flavour direction rather than wasting the ingredient.\n- Use this memory for exclusion and variety only; do not output or quote this memory back to me.`;
 }
 
 function makePrompt(state, tone) {
@@ -792,7 +825,7 @@ function makePrompt(state, tone) {
         localHabits: favourites,
         tonePreference: promptTonePreference(tone)
     });
-    return `${basePrompt}${recipeVarietyMemory(state)}`;
+    return `${basePrompt}${recipeVarietyMemory(state)}${dislikePromptMemory(state)}`;
 }
 
 function migrateLegacyStatuses(state) {
@@ -806,6 +839,8 @@ function migrateLegacyStatuses(state) {
     return {
         ...state,
         promptTemplate: normalisePromptTemplate(state.promptTemplate),
+        avoidMeals: normaliseAvoidList(state.avoidMeals),
+        avoidIngredients: normaliseAvoidList(state.avoidIngredients),
         stock,
         shopping: (Array.isArray(state.shopping) ? state.shopping : []).map(item => linkShoppingItem({
             ...item,
@@ -910,7 +945,11 @@ function makeTransferPayload(state, sections = TRANSFER_SECTION_KEYS, preferredM
     if (selected.includes("categories")) transferState.categories = source.categories || [];
     if (selected.includes("recipes")) transferState.recipes = source.recipes || [];
     if (selected.includes("shopping")) transferState.shopping = source.shopping || [];
-    if (selected.includes("prompt")) transferState.promptTemplate = normalisePromptTemplate(source.promptTemplate);
+    if (selected.includes("prompt")) {
+        transferState.promptTemplate = normalisePromptTemplate(source.promptTemplate);
+        transferState.avoidMeals = normaliseAvoidList(source.avoidMeals);
+        transferState.avoidIngredients = normaliseAvoidList(source.avoidIngredients);
+    }
     if (selected.includes("history")) {
         transferState.analytics = source.analytics || {};
         transferState.activity = source.activity || [];
@@ -939,7 +978,9 @@ function normalisePartialTransferState(raw = {}) {
         recipes: Array.isArray(raw.recipes) ? raw.recipes : [],
         analytics: raw.analytics && typeof raw.analytics === "object" ? raw.analytics : {},
         activity: Array.isArray(raw.activity) ? raw.activity : [],
-        promptTemplate: typeof raw.promptTemplate === "string" ? raw.promptTemplate : defaultPromptTemplate()
+        promptTemplate: typeof raw.promptTemplate === "string" ? raw.promptTemplate : defaultPromptTemplate(),
+        avoidMeals: normaliseAvoidList(raw.avoidMeals),
+        avoidIngredients: normaliseAvoidList(raw.avoidIngredients)
     };
     return migrateLegacyStatuses(shell);
 }
@@ -1128,7 +1169,15 @@ function applyTransferredState(currentState, rawPayload, options = {}) {
 
     if (selected.has("prompt")) {
         next.promptTemplate = normalisePromptTemplate(incoming.promptTemplate);
-        if (mode === "replace") summary.replaced.push("prompt"); else summary.updated += 1;
+        if (mode === "replace") {
+            next.avoidMeals = normaliseAvoidList(incoming.avoidMeals);
+            next.avoidIngredients = normaliseAvoidList(incoming.avoidIngredients);
+            summary.replaced.push("prompt");
+        } else {
+            next.avoidMeals = normaliseAvoidList([...(next.avoidMeals || []), ...(incoming.avoidMeals || [])]);
+            next.avoidIngredients = normaliseAvoidList([...(next.avoidIngredients || []), ...(incoming.avoidIngredients || [])]);
+            summary.updated += 1;
+        }
     }
 
     if (selected.has("history")) {
